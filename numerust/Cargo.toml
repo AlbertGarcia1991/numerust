@@ -1,0 +1,8 @@
+[package]
+name = "numerust"
+version = "0.1.0"
+edition = "2021"
+description = "Numerical methods and Machine Learning crate"
+readme = "README.md"
+
+[dependencies]
