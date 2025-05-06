@@ -22,7 +22,7 @@ jobs:
         toolchain: stable
 
     - name: Build project
-      run: cargo build --verbose
+      run: cd numerust && cargo build --verbose
 
     - name: Run tests
       run: cargo test
