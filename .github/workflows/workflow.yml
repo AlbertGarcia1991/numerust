@@ -6,6 +6,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
@@ -27,22 +31,19 @@ jobs:
         toolchain: stable
         override: true
 
-    #
-    - name: Install cargo-nextest
-    - uses: taiki-e/install-action@cargo-nextest
-
     # run sccache
     - name: Run sccache-cache
     - uses: mozilla-actions/sccache-action@v0.0.7
 
+    # Check code formatting
+    - name: Check formatting
+    - run: cargo fmt --all --check
+    
     # Run Clippy (linting)
     - name: Run Clippy
     - run: cargo clippy --all-targets -- -D warnings
 
-    # Check code formatting
-    - name: Check formatting
-    - run: cargo fmt --all --check
 
     # Run tests with cargo-nextest
     - name: Run Tests
-    - run: cargo nextest run
+    - run: cargo test
