@@ -68,6 +68,20 @@ impl Tensor {
     pub fn dims(&self) -> usize {
         self.shape.len()
     }
+
+    pub fn at(&self, indices: &[usize]) -> f64 {
+        if indices.len() != self.shape.len() {
+            panic!("Number of indices does not match the tensor shape");
+        }
+        let mut flat_index: usize = 0;
+        for (i, &idx) in indices.iter().enumerate() {
+            if idx >= self.shape[i] {
+                panic!("Index out of bounds for dimension {}", i);
+            }
+            flat_index += idx * self.strides[i];
+        }
+        self.data[flat_index]
+    }
 }
 
 impl Index<usize> for Tensor {
@@ -200,5 +214,14 @@ mod tests {
         assert_eq!(t[idx], 3.0);
         idx += 1;
         assert_eq!(t[idx], 4.0);
+    }
+
+    #[test]
+    fn test_at() {
+        let t: Tensor = Tensor::new(&[2, 2], &[1, 2, 3, 4]);
+        assert_eq!(t.at(&[0, 0]), 1.0);
+        assert_eq!(t.at(&[0, 1]), 2.0);
+        assert_eq!(t.at(&[1, 0]), 3.0);
+        assert_eq!(t.at(&[1, 1]), 4.0);
     }
 }
