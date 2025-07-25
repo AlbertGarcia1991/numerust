@@ -127,10 +127,14 @@ macro_rules! impl_binary_tensor_op {
                 }
             }
         }
-        impl $trait<f64> for &Tensor {
+        impl<T> $trait<T> for &Tensor
+        where
+            T: Into<f64> + Copy,
+        {
             type Output = Tensor;
-            fn $func(self, rhs: f64) -> Self::Output {
-                let data = self.data.iter().map(|a| a.$func(rhs)).collect();
+            fn $func(self, rhs: T) -> Self::Output {
+                let rhs_f64 = rhs.into();
+                let data = self.data.iter().map(|a| a.$func(rhs_f64)).collect();
                 Tensor {
                     data,
                     shape: self.shape.clone(),
@@ -312,5 +316,42 @@ mod tests {
         let b: Tensor = Tensor::new(&[2], &[3, 2]);
         let c: Tensor = &a % &b;
         assert_eq!(c.data, &[1.0, 1.0]);
+    }
+
+    #[test]
+    fn test_elementwise_add_scalar() {
+        let a: Tensor = Tensor::new(&[2], &[1, 2]);
+        let b: Tensor = &a + 10.;
+        assert_eq!(b.data, &[11.0, 12.0]);
+        let c: Tensor = &a + 10;
+        assert_eq!(c.data, &[11.0, 12.0]);
+    }
+
+    #[test]
+    fn test_elementwise_sub_scalar() {
+        let a: Tensor = Tensor::new(&[2], &[1, 2]);
+        let b: Tensor = &a - 1;
+        assert_eq!(b.data, &[0.0, 1.0]);
+    }
+
+    #[test]
+    fn test_elementwise_mul_scalar() {
+        let a: Tensor = Tensor::new(&[2], &[1, 2]);
+        let b: Tensor = &a * 3;
+        assert_eq!(b.data, &[3.0, 6.0]);
+    }
+
+    #[test]
+    fn test_elementwise_div_scalar() {
+        let a: Tensor = Tensor::new(&[2], &[1, 3]);
+        let b: Tensor = &a / 2;
+        assert_eq!(b.data, &[0.5, 1.5]);
+    }
+
+    #[test]
+    fn test_elementwise_mod_scalar() {
+        let a: Tensor = Tensor::new(&[2], &[1, 2]);
+        let b: Tensor = &a % 2;
+        assert_eq!(b.data, &[1.0, 0.0]);
     }
 }
