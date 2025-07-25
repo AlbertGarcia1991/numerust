@@ -62,6 +62,10 @@ impl Tensor {
         self.shape = new_shape.to_vec();
         self.strides = compute_strides(new_shape);
     }
+
+    pub fn dims(&self) -> usize {
+        self.shape.len()
+    }
 }
 
 #[cfg(test)]
@@ -133,6 +137,7 @@ mod tests {
         assert_eq!(tensor.data, vec![1., 2., 3., 4.]);
         assert_eq!(tensor.shape, vec![2, 2]);
         assert_eq!(tensor.strides, vec![2, 1]);
+        assert_eq!(tensor.dims(), 2);
     }
 
     #[test]
@@ -157,5 +162,6 @@ mod tests {
         tensor.reshape(&[6]);
         assert_eq!(tensor.shape, [6]);
         assert_eq!(tensor.strides, [1]);
+        assert_eq!(tensor.dims(), 1);
     }
 }
