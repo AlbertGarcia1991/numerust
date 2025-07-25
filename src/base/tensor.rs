@@ -13,6 +13,10 @@ fn compute_strides(shape: &[usize]) -> Vec<usize> {
     strides
 }
 
+fn prod(dims: &[usize]) -> usize {
+    dims.iter().copied().product()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -43,5 +47,18 @@ mod tests {
         shape.push(5);
         let mut strides: Vec<usize> = compute_strides(&shape);
         assert_eq!(strides, vec!(15, 5, 1));
+    }
+
+    #[test]
+    fn test_prod() {
+        let shape: [usize; 1] = [2];
+        let strides: usize = prod(&shape);
+        assert_eq!(strides, 2);
+        let shape: [usize; 2] = [2, 3];
+        let strides: usize = prod(&shape);
+        assert_eq!(strides, 6);
+        let shape: [usize; 3] = [2, 3, 5];
+        let strides: usize = prod(&shape);
+        assert_eq!(strides, 30);
     }
 }
