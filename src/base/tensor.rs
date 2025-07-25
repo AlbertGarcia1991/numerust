@@ -2,7 +2,7 @@
 
 use std::ops::{Index, IndexMut};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct Tensor {
     data: Vec<f64>,
     shape: Vec<usize>,
@@ -69,7 +69,8 @@ impl Tensor {
         self.shape.len()
     }
 
-    pub fn at(&self, indices: &[usize]) -> f64 {
+    // TODO: Test return Box to remove overheading of having to unwrap result. Benchmark speed and if Box might be implemented somewhere else
+    pub fn at(&self, indices: &[usize]) -> Result<Tensor, f64> {
         if indices.len() != self.shape.len() {
             panic!("Number of indices does not match the tensor shape");
         }
@@ -80,7 +81,20 @@ impl Tensor {
             }
             flat_index += idx * self.strides[i];
         }
-        self.data[flat_index]
+        // If all dimensions are specified, return the single value
+        if indices.len() == self.shape.len() {
+            return Err(self.data[flat_index]);
+        }
+        // Otherwise, calculate the sub-tensor
+        let sub_shape: Vec<usize> = self.shape[indices.len()..].to_vec();
+        let sub_strides: Vec<usize> = self.strides[indices.len()..].to_vec();
+        let sub_size: usize = prod(&sub_shape);
+        let sub_data: Vec<f64> = self.data[flat_index..flat_index + sub_size].to_vec();
+        Ok(Tensor {
+            data: sub_data,
+            shape: sub_shape,
+            strides: sub_strides,
+        })
     }
 }
 
@@ -219,9 +233,8 @@ mod tests {
     #[test]
     fn test_at() {
         let t: Tensor = Tensor::new(&[2, 2], &[1, 2, 3, 4]);
-        assert_eq!(t.at(&[0, 0]), 1.0);
-        assert_eq!(t.at(&[0, 1]), 2.0);
-        assert_eq!(t.at(&[1, 0]), 3.0);
-        assert_eq!(t.at(&[1, 1]), 4.0);
+        assert_eq!(t.at(&[0, 1]).unwrap_err(), 2.0);
+        let sub_t: Tensor = t.at(&[0]).unwrap();
+        assert_eq!(sub_t.data, vec![1., 2.]);
     }
 }
