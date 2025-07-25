@@ -36,6 +36,22 @@ impl Tensor {
             strides,
         }
     }
+
+    pub fn new_from_vec_1d<T>(shape: &[usize], data: &Vec<T>) -> Self
+    where
+        T: Into<f64> + Copy,
+    {
+        if prod(shape) != data.len() {
+            panic!("Shape Mismatch");
+        }
+        let data: Vec<f64> = data.iter().map(|&v| v.into()).collect();
+        let strides: Vec<usize> = compute_strides(shape);
+        Self {
+            data,
+            shape: shape.to_vec(),
+            strides,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -63,10 +79,10 @@ mod tests {
         let mut strides: Vec<usize> = compute_strides(&shape);
         assert_eq!(strides, vec!(1));
         shape.push(3);
-        let mut strides: Vec<usize> = compute_strides(&shape);
+        strides = compute_strides(&shape);
         assert_eq!(strides, vec!(3, 1));
         shape.push(5);
-        let mut strides: Vec<usize> = compute_strides(&shape);
+        strides = compute_strides(&shape);
         assert_eq!(strides, vec!(15, 5, 1));
     }
 
@@ -95,6 +111,15 @@ mod tests {
     #[should_panic]
     fn test_new_tensor_init_should_panic() {
         let tensor: Tensor = Tensor::new(&[2, 3], &[1, 2, 3, 4]);
+        assert_eq!(tensor.data, vec![1., 2., 3., 4.]);
+        assert_eq!(tensor.shape, vec![2, 2]);
+        assert_eq!(tensor.strides, vec![2, 1]);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_new_tensor_init_from_vec_1d() {
+        let tensor: Tensor = Tensor::new_from_vec_1d(&[2, 3], &vec![1, 2, 3, 4]);
         assert_eq!(tensor.data, vec![1., 2., 3., 4.]);
         assert_eq!(tensor.shape, vec![2, 2]);
         assert_eq!(tensor.strides, vec![2, 1]);
