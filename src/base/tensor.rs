@@ -54,6 +54,14 @@ impl Tensor {
             strides,
         }
     }
+
+    pub fn reshape(&mut self, new_shape: &[usize]) {
+        if prod(new_shape) != self.data.len() {
+            panic!("Trying to reshape to invalid shape");
+        }
+        self.shape = new_shape.to_vec();
+        self.strides = compute_strides(new_shape);
+    }
 }
 
 #[cfg(test)]
@@ -125,5 +133,13 @@ mod tests {
         assert_eq!(tensor.data, vec![1., 2., 3., 4.]);
         assert_eq!(tensor.shape, vec![2, 2]);
         assert_eq!(tensor.strides, vec![2, 1]);
+    }
+
+    #[test]
+    fn test_reshape() {
+        let mut tensor: Tensor = Tensor::new_from_vec_1d(&[2, 3], &vec![1, 2, 3, 4, 5, 6]);
+        tensor.reshape(&[3, 2]);
+        assert_eq!(tensor.shape, [3, 2]);
+        assert_eq!(tensor.strides, [2, 1]);
     }
 }
