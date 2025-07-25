@@ -1,6 +1,6 @@
 #![allow(dead_code)] // Suppress "is never used" warnings globally in this file
 
-use std::ops::{Index, IndexMut};
+use std::ops::{Add, Div, Index, IndexMut, Mul, Rem, Sub};
 
 #[derive(Clone, Debug)]
 struct Tensor {
@@ -71,9 +71,6 @@ impl Tensor {
 
     // TODO: Test return Box to remove overheading of having to unwrap result. Benchmark speed and if Box might be implemented somewhere else
     pub fn at(&self, indices: &[usize]) -> Result<Tensor, f64> {
-        if indices.len() != self.shape.len() {
-            panic!("Number of indices does not match the tensor shape");
-        }
         let mut flat_index: usize = 0;
         for (i, &idx) in indices.iter().enumerate() {
             if idx >= self.shape[i] {
@@ -110,6 +107,45 @@ impl IndexMut<usize> for Tensor {
         &mut self.data[idx]
     }
 }
+
+macro_rules! impl_binary_tensor_op {
+    ($trait:ident, $func:ident) => {
+        impl $trait for &Tensor {
+            type Output = Tensor;
+            fn $func(self, rhs: Self) -> Self::Output {
+                assert_eq!(self.shape, rhs.shape, "Shape mismatch");
+                let data = self
+                    .data
+                    .iter()
+                    .zip(&rhs.data)
+                    .map(|(a, b)| a.$func(*b))
+                    .collect();
+                Tensor {
+                    data,
+                    shape: self.shape.clone(),
+                    strides: self.strides.clone(),
+                }
+            }
+        }
+        impl $trait<f64> for &Tensor {
+            type Output = Tensor;
+            fn $func(self, rhs: f64) -> Self::Output {
+                let data = self.data.iter().map(|a| a.$func(rhs)).collect();
+                Tensor {
+                    data,
+                    shape: self.shape.clone(),
+                    strides: self.strides.clone(),
+                }
+            }
+        }
+    };
+}
+
+impl_binary_tensor_op!(Add, add);
+impl_binary_tensor_op!(Sub, sub);
+impl_binary_tensor_op!(Mul, mul);
+impl_binary_tensor_op!(Div, div);
+impl_binary_tensor_op!(Rem, rem);
 
 #[cfg(test)]
 mod tests {
@@ -236,5 +272,45 @@ mod tests {
         assert_eq!(t.at(&[0, 1]).unwrap_err(), 2.0);
         let sub_t: Tensor = t.at(&[0]).unwrap();
         assert_eq!(sub_t.data, vec![1., 2.]);
+    }
+
+    #[test]
+    fn test_elementwise_add() {
+        let a: Tensor = Tensor::new(&[2], &[1, 2]);
+        let b: Tensor = Tensor::new(&[2], &[3, 4]);
+        let c: Tensor = &a + &b;
+        assert_eq!(c.data, &[4.0, 6.0]);
+    }
+
+    #[test]
+    fn test_elementwise_sub() {
+        let a: Tensor = Tensor::new(&[2], &[1, 4]);
+        let b: Tensor = Tensor::new(&[2], &[3, 2]);
+        let c: Tensor = &a - &b;
+        assert_eq!(c.data, &[-2.0, 2.0]);
+    }
+
+    #[test]
+    fn test_elementwise_mul() {
+        let a: Tensor = Tensor::new(&[2], &[1, 2]);
+        let b: Tensor = Tensor::new(&[2], &[3, 4]);
+        let c: Tensor = &a * &b;
+        assert_eq!(c.data, &[3.0, 8.0]);
+    }
+
+    #[test]
+    fn test_elementwise_div() {
+        let a: Tensor = Tensor::new(&[2], &[1, 2]);
+        let b: Tensor = Tensor::new(&[2], &[3, 4]);
+        let c: Tensor = &a / &b;
+        assert_eq!(c.data, &[1.0 / 3.0, 0.5]);
+    }
+
+    #[test]
+    fn test_elementwise_rem() {
+        let a: Tensor = Tensor::new(&[2], &[1, 5]);
+        let b: Tensor = Tensor::new(&[2], &[3, 2]);
+        let c: Tensor = &a % &b;
+        assert_eq!(c.data, &[1.0, 1.0]);
     }
 }
