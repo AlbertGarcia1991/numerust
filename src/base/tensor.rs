@@ -1,5 +1,7 @@
 #![allow(dead_code)] // Suppress "is never used" warnings globally in this file
 
+use std::ops::{Index, IndexMut};
+
 #[derive(Clone)]
 struct Tensor {
     data: Vec<f64>,
@@ -65,6 +67,19 @@ impl Tensor {
 
     pub fn dims(&self) -> usize {
         self.shape.len()
+    }
+}
+
+impl Index<usize> for Tensor {
+    type Output = f64;
+    fn index(&self, idx: usize) -> &Self::Output {
+        &self.data[idx]
+    }
+}
+
+impl IndexMut<usize> for Tensor {
+    fn index_mut(&mut self, idx: usize) -> &mut Self::Output {
+        &mut self.data[idx]
     }
 }
 
@@ -163,5 +178,27 @@ mod tests {
         assert_eq!(tensor.shape, [6]);
         assert_eq!(tensor.strides, [1]);
         assert_eq!(tensor.dims(), 1);
+    }
+
+    #[test]
+    fn test_index() {
+        let t: Tensor = Tensor::new(&[2, 2], &[1, 2, 3, 4]);
+        assert_eq!(t[0], 1.0);
+        assert_eq!(t[1], 2.0);
+        assert_eq!(t[2], 3.0);
+        assert_eq!(t[3], 4.0);
+    }
+
+    #[test]
+    fn test_index_mut() {
+        let t: Tensor = Tensor::new(&[2, 2], &[1, 2, 3, 4]);
+        let mut idx: usize = 0;
+        assert_eq!(t[idx], 1.0);
+        idx += 1;
+        assert_eq!(t[idx], 2.0);
+        idx += 1;
+        assert_eq!(t[idx], 3.0);
+        idx += 1;
+        assert_eq!(t[idx], 4.0);
     }
 }
