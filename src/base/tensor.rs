@@ -142,4 +142,20 @@ mod tests {
         assert_eq!(tensor.shape, [3, 2]);
         assert_eq!(tensor.strides, [2, 1]);
     }
+
+    #[test]
+    fn test_reshape_from_1d() {
+        let mut tensor: Tensor = Tensor::new_from_vec_1d(&[1, 6], &vec![1, 2, 3, 4, 5, 6]);
+        tensor.reshape(&[3, 2]);
+        assert_eq!(tensor.shape, [3, 2]);
+        assert_eq!(tensor.strides, [2, 1]);
+    }
+
+    #[test]
+    fn test_reshape_to_1d() {
+        let mut tensor: Tensor = Tensor::new_from_vec_1d(&[2, 3], &vec![1, 2, 3, 4, 5, 6]);
+        tensor.reshape(&[6]);
+        assert_eq!(tensor.shape, [6]);
+        assert_eq!(tensor.strides, [1]);
+    }
 }
