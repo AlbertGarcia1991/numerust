@@ -1,3 +1,5 @@
+#![allow(dead_code)] // Suppress "is never used" warnings globally in this file
+
 #[derive(Clone)]
 struct Tensor {
     data: Vec<f64>,
