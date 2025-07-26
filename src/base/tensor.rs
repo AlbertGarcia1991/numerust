@@ -1,6 +1,6 @@
 #![allow(dead_code)] // Suppress "is never used" warnings globally in this file
 
-use std::ops::{Add, Div, Index, IndexMut, Mul, Rem, Sub};
+use std::ops::{Add, BitXor, Div, Index, IndexMut, Mul, Rem, Sub};
 
 #[derive(Clone, Debug)]
 struct Tensor {
@@ -34,6 +34,23 @@ impl Tensor {
             data.push(v.into());
         }
         let strides: Vec<usize> = compute_strides(shape);
+        Self {
+            data,
+            shape: shape.to_vec(),
+            strides,
+        }
+    }
+
+    pub fn new_1d<T>(values: &[T]) -> Self
+    where
+        T: Into<f64> + Copy,
+    {
+        let shape: [usize; 1] = [values.len()];
+        let mut data: Vec<f64> = Vec::with_capacity(values.len());
+        for &v in values {
+            data.push(v.into());
+        }
+        let strides: Vec<usize> = compute_strides(&shape);
         Self {
             data,
             shape: shape.to_vec(),
@@ -150,6 +167,40 @@ impl_binary_tensor_op!(Sub, sub);
 impl_binary_tensor_op!(Mul, mul);
 impl_binary_tensor_op!(Div, div);
 impl_binary_tensor_op!(Rem, rem);
+
+impl BitXor for &Tensor {
+    type Output = Tensor;
+    fn bitxor(self, rhs: Self) -> Self::Output {
+        assert_eq!(self.shape, rhs.shape, "Shape mismatch");
+        let data: Vec<f64> = self
+            .data
+            .iter()
+            .zip(&rhs.data)
+            .map(|(a, b)| a.powf(*b))
+            .collect();
+        Tensor {
+            data,
+            shape: self.shape.clone(),
+            strides: self.strides.clone(),
+        }
+    }
+}
+
+impl<T> BitXor<T> for &Tensor
+where
+    T: Into<f64> + Copy,
+{
+    type Output = Tensor;
+    fn bitxor(self, rhs: T) -> Self::Output {
+        let rhs_f64: f64 = rhs.into();
+        let data: Vec<f64> = self.data.iter().map(|a| a.powf(rhs_f64)).collect();
+        Tensor {
+            data,
+            shape: self.shape.clone(),
+            strides: self.strides.clone(),
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -353,5 +404,20 @@ mod tests {
         let a: Tensor = Tensor::new(&[2], &[1, 2]);
         let b: Tensor = &a % 2;
         assert_eq!(b.data, &[1.0, 0.0]);
+    }
+
+    #[test]
+    fn test_elementwise_exp() {
+        let a: Tensor = Tensor::new_1d(&[-1, 0, 2]);
+        let b: Tensor = Tensor::new_1d(&[2, 2, 2]);
+        let c: Tensor = &a ^ &b;
+        assert_eq!(c.data, &[1.0, 0.0, 4.0]);
+    }
+
+    #[test]
+    fn test_elementwise_exp_scalar() {
+        let a: Tensor = Tensor::new(&[2], &[3, 4]);
+        let b: Tensor = &a ^ 2;
+        assert_eq!(b.data, &[9.0, 16.0]);
     }
 }
