@@ -110,6 +110,63 @@ impl Tensor {
             strides: sub_strides,
         })
     }
+
+    // TODO: Make agnostic to number of dimensions
+    pub fn max(&self, axis: Option<Tensor>) -> Result<Tensor, f64> {
+        match axis {
+            None => {
+                // Global max (no axis specified)
+                let max_val: f64 = self.data.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                Err(max_val)
+            }
+            Some(axis_tensor) => {
+                // Max along specified axis
+                if axis_tensor.shape.len() != 1 {
+                    panic!("Axis tensor must be 1-dimensional");
+                }
+
+                let axis: usize = axis_tensor.data[0] as usize;
+                if axis >= self.shape.len() {
+                    panic!("Axis out of bounds");
+                }
+
+                // Calculate the shape of the result tensor
+                let mut new_shape: Vec<usize> = self.shape.clone();
+                new_shape.remove(axis);
+
+                let mut max_values = Vec::new();
+
+                // For a 2D tensor with shape [M, N]:
+                // If axis = 0, we want max of each column (max across rows)
+                // If axis = 1, we want max of each row (max across columns)
+                if axis == 0 {
+                    // Process each row (find max across columns)
+                    for row in 0..self.shape[0] {
+                        let mut max_val = f64::NEG_INFINITY;
+                        // Look at each column in this row
+                        for col in 0..self.shape[1] {
+                            let idx = row * self.strides[0] + col;
+                            max_val = max_val.max(self.data[idx]);
+                        }
+                        max_values.push(max_val);
+                    }
+                } else {
+                    // Process each column (find max across rows)
+                    for col in 0..self.shape[1] {
+                        let mut max_val = f64::NEG_INFINITY;
+                        // Look at each row in this column
+                        for row in 0..self.shape[0] {
+                            let idx = row * self.strides[0] + col;
+                            max_val = max_val.max(self.data[idx]);
+                        }
+                        max_values.push(max_val);
+                    }
+                }
+
+                Ok(Tensor::new(&new_shape, &max_values))
+            }
+        }
+    }
 }
 
 impl Index<usize> for Tensor {
@@ -419,5 +476,28 @@ mod tests {
         let a: Tensor = Tensor::new(&[2], &[3, 4]);
         let b: Tensor = &a ^ 2;
         assert_eq!(b.data, &[9.0, 16.0]);
+    }
+
+    #[test]
+    fn test_max_global() {
+        let t: Tensor = Tensor::new(&[2, 2], &[1, 5, 3, 4]);
+        let m: f64 = t.max(None).unwrap_err();
+        assert_eq!(m, 5.0);
+    }
+
+    #[test]
+    fn test_max_axis() {
+        let t: Tensor = Tensor::new(&[2, 2], &[1, 5, 3, 4]);
+        let axis_tensor: Tensor = Tensor::new_1d(&[0]); // Specify axis 0
+        let m: Tensor = t.max(Some(axis_tensor)).unwrap();
+        assert_eq!(m.data, &[5.0, 4.0]); // Max along axis 0
+    }
+
+    #[test]
+    fn test_max_axis_transposed() {
+        let t: Tensor = Tensor::new(&[2, 2], &[1, 5, 3, 4]);
+        let axis_tensor: Tensor = Tensor::new_1d(&[1]); // Specify axis 0
+        let m: Tensor = t.max(Some(axis_tensor)).unwrap();
+        assert_eq!(m.data, &[3.0, 5.0]); // Max along axis 0
     }
 }
