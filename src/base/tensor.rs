@@ -1,4 +1,5 @@
 #![allow(dead_code)] // Suppress "is never used" warnings globally in this file
+#![allow(non_snake_case)]
 
 use std::ops::{Add, BitXor, Div, Index, IndexMut, Mul, Rem, Sub};
 
@@ -109,6 +110,18 @@ impl Tensor {
             shape: sub_shape,
             strides: sub_strides,
         })
+    }
+
+    pub fn T(&self) -> Tensor {
+        if self.dims() == 1 {
+            panic!("Transpose requires dims > 1");
+        }
+
+        Tensor {
+            data: self.data.clone(),
+            shape: self.shape.iter().rev().cloned().collect(),
+            strides: self.strides.iter().rev().cloned().collect(),
+        }
     }
 
     // TODO: Make agnostic to number of dimensions
@@ -499,5 +512,41 @@ mod tests {
         let axis_tensor: Tensor = Tensor::new_1d(&[1]); // Specify axis 0
         let m: Tensor = t.max(Some(axis_tensor)).unwrap();
         assert_eq!(m.data, &[3.0, 5.0]); // Max along axis 0
+    }
+
+    #[test]
+    fn test_transpose() {
+        let t: Tensor = Tensor::new(&[2, 3], &[1, 2, 3, 4, 5, 6]);
+        let t_transposed: Tensor = t.T();
+        assert_eq!(t_transposed.shape, vec![3, 2]);
+        assert_eq!(t_transposed.strides, vec![1, 3]);
+        // The data is not rearranged, only shape and strides are changed
+        assert_eq!(t_transposed.data, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+    }
+
+    #[test]
+    fn test_transpose_3d() {
+        let t: Tensor = Tensor::new(
+            &[2, 3, 4],
+            &[
+                1, 2, 3, 4, // [0, 0, :]
+                5, 6, 7, 8, // [0, 1, :]
+                9, 10, 11, 12, // [0, 2, :]
+                13, 14, 15, 16, // [1, 0, :]
+                17, 18, 19, 20, // [1, 1, :]
+                21, 22, 23, 24, // [1, 2, :]
+            ],
+        );
+        let t_transposed: Tensor = t.T();
+        assert_eq!(t_transposed.shape, vec![4, 3, 2]);
+        assert_eq!(t_transposed.strides, vec![1, 4, 12]);
+        // The data is not rearranged, only shape and strides are changed
+        assert_eq!(
+            t_transposed.data,
+            vec![
+                1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
+                16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0
+            ]
+        );
     }
 }
