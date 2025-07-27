@@ -87,8 +87,7 @@ impl Tensor {
         self.shape.len()
     }
 
-    // TODO: Test return Box to remove overheading of having to unwrap result. Benchmark speed and if Box might be implemented somewhere else
-    pub fn at(&self, indices: &[usize]) -> Result<Tensor, f64> {
+    pub fn at(&self, indices: &[usize]) -> Tensor {
         let mut flat_index: usize = 0;
         for (i, &idx) in indices.iter().enumerate() {
             if idx >= self.shape[i] {
@@ -98,18 +97,18 @@ impl Tensor {
         }
         // If all dimensions are specified, return the single value
         if indices.len() == self.shape.len() {
-            return Err(self.data[flat_index]);
+            return Self::new_1d(&[self.data[flat_index]]);
         }
         // Otherwise, calculate the sub-tensor
         let sub_shape: Vec<usize> = self.shape[indices.len()..].to_vec();
         let sub_strides: Vec<usize> = self.strides[indices.len()..].to_vec();
         let sub_size: usize = prod(&sub_shape);
         let sub_data: Vec<f64> = self.data[flat_index..flat_index + sub_size].to_vec();
-        Ok(Tensor {
+        Tensor {
             data: sub_data,
             shape: sub_shape,
             strides: sub_strides,
-        })
+        }
     }
 
     pub fn T(&self) -> Tensor {
@@ -147,7 +146,7 @@ impl Tensor {
                 let mut new_shape: Vec<usize> = self.shape.clone();
                 new_shape.remove(axis);
 
-                let mut max_values = Vec::new();
+                let mut max_values: Vec<f64> = Vec::new();
 
                 // For a 2D tensor with shape [M, N]:
                 // If axis = 0, we want max of each column (max across rows)
@@ -155,10 +154,10 @@ impl Tensor {
                 if axis == 0 {
                     // Process each row (find max across columns)
                     for row in 0..self.shape[0] {
-                        let mut max_val = f64::NEG_INFINITY;
+                        let mut max_val: f64 = f64::NEG_INFINITY;
                         // Look at each column in this row
                         for col in 0..self.shape[1] {
-                            let idx = row * self.strides[0] + col;
+                            let idx: usize = row * self.strides[0] + col;
                             max_val = max_val.max(self.data[idx]);
                         }
                         max_values.push(max_val);
@@ -166,10 +165,10 @@ impl Tensor {
                 } else {
                     // Process each column (find max across rows)
                     for col in 0..self.shape[1] {
-                        let mut max_val = f64::NEG_INFINITY;
+                        let mut max_val: f64 = f64::NEG_INFINITY;
                         // Look at each row in this column
                         for row in 0..self.shape[0] {
-                            let idx = row * self.strides[0] + col;
+                            let idx: usize = row * self.strides[0] + col;
                             max_val = max_val.max(self.data[idx]);
                         }
                         max_values.push(max_val);
@@ -192,6 +191,11 @@ impl Index<usize> for Tensor {
 impl IndexMut<usize> for Tensor {
     fn index_mut(&mut self, idx: usize) -> &mut Self::Output {
         &mut self.data[idx]
+    }
+}
+impl PartialEq for Tensor {
+    fn eq(&self, other: &Self) -> bool {
+        self.shape == other.shape && self.data == other.data
     }
 }
 
@@ -394,9 +398,18 @@ mod tests {
     #[test]
     fn test_at() {
         let t: Tensor = Tensor::new(&[2, 2], &[1, 2, 3, 4]);
-        assert_eq!(t.at(&[0, 1]).unwrap_err(), 2.0);
-        let sub_t: Tensor = t.at(&[0]).unwrap();
-        assert_eq!(sub_t.data, vec![1., 2.]);
+        assert_eq!(t.at(&[0, 1]).data, [2.0]);
+        let sub_t: Tensor = t.at(&[0]);
+        assert_eq!(sub_t.data, [1., 2.]);
+    }
+
+    #[test]
+    fn test_eq() {
+        let a: Tensor = Tensor::new(&[2, 2], &[1, 2, 3, 4]);
+        let b: Tensor = Tensor::new(&[2, 2], &[1, 2, 3, 4]);
+        assert_eq!(true, a == b);
+        let c: Tensor = Tensor::new(&[2, 2], &[1, 2, 3, 5]);
+        assert_eq!(true, a != c);
     }
 
     #[test]
