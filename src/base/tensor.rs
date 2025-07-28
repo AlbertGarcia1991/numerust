@@ -27,8 +27,12 @@ struct Tensor {
 
 fn compute_strides(shape: &[usize]) -> Vec<usize> {
     let mut strides: Vec<usize> = vec![1; shape.len()];
-    for i in (0..shape.len() - 1).rev() {
-        strides[i] = strides[i + 1] * shape[i + 1];
+    if shape.len() == 0 {
+        return Vec::new();
+    } else {
+        for i in (0..shape.len() - 1).rev() {
+            strides[i] = strides[i + 1] * shape[i + 1];
+        }
     }
     strides
 }
@@ -139,10 +143,100 @@ impl Tensor {
     }
 
     pub fn reduce(&self, reduction_type: ReductionType, reduction_axis: ReductionAxis) -> Self {
-        Tensor::new_1d(&[1, 2, 3])
+        // ---------- 1. Normalise and validate axis argument ----------
+        let mut axes: Vec<usize> = match reduction_axis {
+            ReductionAxis::Absolute => (0..self.dims()).collect(),
+            ReductionAxis::Axis(ax) if !ax.is_empty() => {
+                let mut ax: Vec<usize> = ax.clone();
+                ax.sort_unstable();
+                ax.dedup();
+                if ax.iter().any(|&a| a >= self.dims()) {
+                    panic!("Axis out of bounds");
+                }
+                ax
+            }
+            _ => panic!("Axis list cannot be empty"),
+        };
+
+        // Fast path: reduce over every axis ⇒ scalar result
+        if axes.len() == self.dims() {
+            return Tensor::new_1d(&[self.reduction_op(&reduction_type)]);
+        }
+
+        // ---------- 2. Recursive helper that uses `at` ----------
+        fn reduce_recursive(
+            tensor: &Tensor,
+            axes: Vec<usize>,
+            reduction_type: &ReductionType,
+        ) -> Tensor {
+            if axes.is_empty() {
+                return tensor.clone(); // nothing left to reduce
+            }
+
+            // Always look at the first axis in the (sorted) list
+            let first_axis: usize = axes[0];
+
+            /* ---- Case A : we are reducing the leading axis (0) ---- */
+            if first_axis == 0 {
+                // Collect every slice [i] and perform an element-wise reduction
+                let slices: Vec<Tensor> = (0..tensor.shape[0]).map(|i| tensor.at(&[i])).collect();
+
+                let elem_cnt: usize = slices[0].data.len();
+                let mut out_data: Vec<f64> = Vec::with_capacity(elem_cnt);
+
+                for elem in 0..elem_cnt {
+                    let mut bucket: Vec<f64> = Vec::with_capacity(slices.len());
+                    for s in &slices {
+                        bucket.push(s.data[elem]);
+                    }
+                    out_data.push(Tensor::new_1d(&bucket).reduction_op(reduction_type));
+                }
+
+                // Result shape = slice-shape with axis-0 removed
+                let mut out_shape: Vec<usize> = slices[0].shape.clone();
+                if out_shape.len() == 1 && out_shape[0] == 1 {
+                    out_shape.clear(); // collapse to scalar when needed
+                }
+                let reduced: Tensor = Tensor::new(&out_shape, &out_data);
+
+                // Still more axes to reduce?  Shift them down and recurse.
+                let next_axes: Vec<usize> = axes[1..].iter().map(|a| a - 1).collect();
+                if next_axes.is_empty() {
+                    reduced
+                } else {
+                    reduce_recursive(&reduced, next_axes, reduction_type)
+                }
+            }
+            /* ---- Case B : leading axis is *not* reduced ------------ */
+            else {
+                // Every slice stays at the front; we recurse inside each one
+                let new_axes: Vec<usize> = axes.iter().map(|a| a - 1).collect(); // shift for sub-tensor
+
+                let mut reduced_slices: Vec<Tensor> = Vec::with_capacity(tensor.shape[0]);
+                for i in 0..tensor.shape[0] {
+                    let sub: Tensor = tensor.at(&[i]);
+                    reduced_slices.push(reduce_recursive(&sub, new_axes.clone(), reduction_type));
+                }
+
+                // Stack the reduced slices back together
+                let slice_shape = &reduced_slices[0].shape;
+                let mut out_shape = vec![reduced_slices.len()];
+                if !slice_shape.is_empty() {
+                    out_shape.extend_from_slice(slice_shape);
+                }
+                let mut out_data = Vec::with_capacity(prod(&out_shape));
+                for s in reduced_slices {
+                    out_data.extend_from_slice(&s.data);
+                }
+                Tensor::new(&out_shape, &out_data)
+            }
+        }
+
+        axes.sort_unstable();
+        reduce_recursive(self, axes, &reduction_type)
     }
 
-    fn reduction_op(&self, reduction_type: ReductionType) -> f64 {
+    fn reduction_op(&self, reduction_type: &ReductionType) -> f64 {
         match reduction_type {
             ReductionType::MAX => self
                 .data
@@ -174,70 +268,12 @@ impl Tensor {
                     sorted[mid]
                 }
             }
-            ReductionType::AVG => self.reduction_op(ReductionType::SUM) / (self.data.len() as f64),
+            ReductionType::AVG => self.reduction_op(&ReductionType::SUM) / (self.data.len() as f64),
             ReductionType::STD => {
-                let avg: f64 = self.reduction_op(ReductionType::AVG);
-                ((&(self - avg) ^ 2).reduction_op(ReductionType::SUM)
+                let avg: f64 = self.reduction_op(&ReductionType::AVG);
+                ((&(self - avg) ^ 2).reduction_op(&ReductionType::SUM)
                     / ((self.data.len() - 1) as f64))
                     .sqrt()
-            }
-            _ => panic!("Reduction Type {reduction_type:?} ot implemented"),
-        }
-    }
-
-    // TODO: Make agnostic to number of dimensions
-    pub fn max(&self, axis: Option<Tensor>) -> Result<Self, f64> {
-        match axis {
-            None => {
-                // Global max (no axis specified)
-                let max_val: f64 = self.data.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-                Err(max_val)
-            }
-            Some(axis_tensor) => {
-                // Max along specified axis
-                if axis_tensor.shape.len() != 1 {
-                    panic!("Axis tensor must be 1-dimensional");
-                }
-
-                let axis: usize = axis_tensor.data[0] as usize;
-                if axis >= self.shape.len() {
-                    panic!("Axis out of bounds");
-                }
-
-                // Calculate the shape of the result tensor
-                let mut new_shape: Vec<usize> = self.shape.clone();
-                new_shape.remove(axis);
-
-                let mut max_values: Vec<f64> = Vec::new();
-
-                // For a 2D tensor with shape [M, N]:
-                // If axis = 0, we want max of each column (max across rows)
-                // If axis = 1, we want max of each row (max across columns)
-                if axis == 0 {
-                    // Process each row (find max across columns)
-                    for row in 0..self.shape[0] {
-                        let mut max_val: f64 = f64::NEG_INFINITY;
-                        // Look at each column in this row
-                        for col in 0..self.shape[1] {
-                            let idx: usize = row * self.strides[0] + col;
-                            max_val = max_val.max(self.data[idx]);
-                        }
-                        max_values.push(max_val);
-                    }
-                } else {
-                    // Process each column (find max across rows)
-                    for col in 0..self.shape[1] {
-                        let mut max_val: f64 = f64::NEG_INFINITY;
-                        // Look at each row in this column
-                        for row in 0..self.shape[0] {
-                            let idx: usize = row * self.strides[0] + col;
-                            max_val = max_val.max(self.data[idx]);
-                        }
-                        max_values.push(max_val);
-                    }
-                }
-
-                Ok(Tensor::new(&new_shape, &max_values))
             }
         }
     }
@@ -583,29 +619,6 @@ mod tests {
     }
 
     #[test]
-    fn test_max_global() {
-        let t: Tensor = Tensor::new(&[2, 2], &[1, 5, 3, 4]);
-        let m: f64 = t.max(None).unwrap_err();
-        assert_eq!(m, 5.0);
-    }
-
-    #[test]
-    fn test_max_axis() {
-        let t: Tensor = Tensor::new(&[2, 2], &[1, 5, 3, 4]);
-        let axis_tensor: Tensor = Tensor::new_1d(&[0]); // Specify axis 0
-        let m: Tensor = t.max(Some(axis_tensor)).unwrap();
-        assert_eq!(m.data, &[5.0, 4.0]); // Max along axis 0
-    }
-
-    #[test]
-    fn test_max_axis_transposed() {
-        let t: Tensor = Tensor::new(&[2, 2], &[1, 5, 3, 4]);
-        let axis_tensor: Tensor = Tensor::new_1d(&[1]); // Specify axis 0
-        let m: Tensor = t.max(Some(axis_tensor)).unwrap();
-        assert_eq!(m.data, &[3.0, 5.0]); // Max along axis 0
-    }
-
-    #[test]
     fn test_transpose() {
         let t: Tensor = Tensor::new(&[2, 3], &[1, 2, 3, 4, 5, 6]);
         let t_transposed: Tensor = t.T();
@@ -644,43 +657,127 @@ mod tests {
     #[test]
     fn test_max() {
         let data: Tensor = Tensor::new_1d(&[1.0, 5.0, -3.0]);
-        assert_eq!(data.reduction_op(ReductionType::MAX), 5.0);
+        assert_eq!(data.reduction_op(&ReductionType::MAX), 5.0);
     }
 
     #[test]
     fn test_min() {
         let data: Tensor = Tensor::new_1d(&[1.0, 5.0, -3.0]);
-        assert_eq!(data.reduction_op(ReductionType::MIN), -3.0);
+        assert_eq!(data.reduction_op(&ReductionType::MIN), -3.0);
     }
 
     #[test]
     fn test_sum() {
         let data: Tensor = Tensor::new_1d(&[1.0, 5.0, -3.0]);
-        assert_eq!(data.reduction_op(ReductionType::SUM), 3.0);
+        assert_eq!(data.reduction_op(&ReductionType::SUM), 3.0);
     }
 
     #[test]
     fn test_med_odd() {
         let data: Tensor = Tensor::new_1d(&[1.0, 5.0, -3.0]);
-        assert_eq!(data.reduction_op(ReductionType::MED), 1.0);
+        assert_eq!(data.reduction_op(&ReductionType::MED), 1.0);
     }
 
     #[test]
     fn test_med_even() {
         let data: Tensor = Tensor::new_1d(&[1.0, 5.0, -3.0, 0.0]);
-        assert_eq!(data.reduction_op(ReductionType::MED), 0.5);
+        assert_eq!(data.reduction_op(&ReductionType::MED), 0.5);
     }
 
     #[test]
     fn test_avg() {
         let data: Tensor = Tensor::new_1d(&[1.0, 5.0, -3.0]);
-        assert_eq!(data.reduction_op(ReductionType::AVG), 1.0);
+        assert_eq!(data.reduction_op(&ReductionType::AVG), 1.0);
     }
 
     #[test]
     fn test_std() {
         let data: Tensor = Tensor::new_1d(&[1.0, 5.0, -3.0]);
-        let std: f64 = data.reduction_op(ReductionType::STD);
+        let std: f64 = data.reduction_op(&ReductionType::STD);
         assert_eq!(std, 4.0);
+    }
+
+    // ---------- helpers ----------
+    fn approx_eq(a: f64, b: f64, eps: f64) -> bool {
+        (a - b).abs() < eps
+    }
+
+    fn scalar(t: Tensor) -> f64 {
+        assert_eq!(t.shape, vec![1]);
+        t.data[0]
+    }
+
+    #[test]
+    fn reduce_1d_all_types() {
+        let t: Tensor = Tensor::new_1d(&[1.0, 3.0, -2.0, 4.0]); // len = 4
+        assert_eq!(
+            scalar(t.reduce(ReductionType::MAX, ReductionAxis::Absolute)),
+            4.0
+        );
+        assert_eq!(
+            scalar(t.reduce(ReductionType::MIN, ReductionAxis::Absolute)),
+            -2.0
+        );
+        assert_eq!(
+            scalar(t.reduce(ReductionType::SUM, ReductionAxis::Absolute)),
+            6.0
+        );
+        assert!(approx_eq(
+            scalar(t.reduce(ReductionType::AVG, ReductionAxis::Absolute)),
+            1.5,
+            1e-12
+        ));
+        assert_eq!(
+            scalar(t.reduce(ReductionType::MED, ReductionAxis::Absolute)),
+            2.0
+        );
+        assert!(approx_eq(
+            scalar(t.reduce(ReductionType::STD, ReductionAxis::Absolute)),
+            7f64.sqrt(),
+            1e-12
+        ));
+        assert_eq!(
+            scalar(t.reduce(ReductionType::MAX, ReductionAxis::Axis(vec![0]))),
+            4.0
+        );
+        assert!(approx_eq(
+            scalar(t.reduce(ReductionType::STD, ReductionAxis::Axis(vec![0]))),
+            7f64.sqrt(),
+            1e-12
+        ));
+    }
+
+    #[test]
+    fn reduce_2d_axis0() {
+        let t: Tensor = Tensor::new(&[2, 3], &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+        let r: Tensor = t.reduce(ReductionType::MAX, ReductionAxis::Axis(vec![0]));
+        assert_eq!(r, Tensor::new_1d(&[4.0, 5.0, 6.0]));
+        let r: Tensor = t.reduce(ReductionType::SUM, ReductionAxis::Axis(vec![0]));
+        assert_eq!(r, Tensor::new_1d(&[5.0, 7.0, 9.0]));
+    }
+
+    #[test]
+    fn reduce_2d_axis1() {
+        let t: Tensor = Tensor::new(&[2, 3], &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+        let r: Tensor = t.reduce(ReductionType::MIN, ReductionAxis::Axis(vec![1]));
+        assert_eq!(r, Tensor::new_1d(&[1.0, 4.0]));
+        let r: Tensor = t.reduce(ReductionType::AVG, ReductionAxis::Axis(vec![1]));
+        assert_eq!(r.shape, vec![2]);
+        assert!(approx_eq(r.data[0], 2.0, 1e-12));
+        assert!(approx_eq(r.data[1], 5.0, 1e-12));
+    }
+
+    #[test]
+    fn reduce_3d_multiple_axes() {
+        let t: Tensor = Tensor::new(&[2, 2, 2], &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
+        let r: Tensor = t.reduce(ReductionType::MAX, ReductionAxis::Axis(vec![0, 2]));
+        assert_eq!(r, Tensor::new_1d(&[6.0, 8.0]));
+        let r: Tensor = t.reduce(ReductionType::STD, ReductionAxis::Axis(vec![1]));
+        let expected: Tensor = Tensor::new(&[2, 2], &[1.41421356237; 4]);
+        assert!(r
+            .data
+            .iter()
+            .zip(&expected.data)
+            .all(|(&a, &b)| approx_eq(a, b, 1e-9)));
     }
 }
