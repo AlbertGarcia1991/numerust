@@ -38,7 +38,7 @@ Everything is developed in **small, test-driven increments**; every commit keeps
 | Milestone | Status | Highlights |
 |-----------|--------|------------|
 | **M0 Array Core** | ⏳ | const-generic tensors, views, broadcast, RNG, thread pool |
-| **M1 Classical ML** | ⭘ | Linear/Ridge/Lasso (analytic + SGD + CD), optimiser suite, data loader, trainer |
+| **M1 Classical ML** | ⏳ | Linear/Ridge/Lasso (analytic + SGD + CD), optimiser suite, data loader, trainer |
 | **M2 Linear Algebra** | ⭘ | GEMM, LU, QR, Chol, `.nmr` serialiser |
 | **M3 Tree Models** | ⭘ | Decision Tree, Random Forest, XGBoost |
 | **M4 DL Core** | ⭘ | Autograd, `Module` trait, MLP/CNN, Dropout, BatchNorm |

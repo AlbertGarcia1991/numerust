@@ -1,24 +1,28 @@
-Tutorials:
-- [ ] Finish basic Rust documentation
-- [ ] Deep dive into Rust's concept of lifetime*
-- [ ] Finish unsafe Rust documentation
-- [ ] rust-numpy versus rustynum -> Array library
-- [ ] Read documentation for selected array library
+ml/linear_regression (https://scikit-learn.org/stable/modules/linear_model.html):
+  - [ ] struct defining ML model (specific for LR)
+  - [ ] analytic solution
+  - [ ] forward pass
+  - [ ] sgd solution: weight init
+  - [ ] sgd solution: backward
+  - [ ] sgd solution: update
+  - [ ] sgd solution: fit
+  - [ ] data: basic implementation of tabular data loader
+  - [ ] data preprocessing: basic implementation of tensor normalization techniques
+  - [ ] viz: basic implemenation of visualization
+  - [ ] non-negative least squares
+  - [ ] Classification
+  - [ ] Ridge
+  - [ ] Lasso
+  - [ ] ElasticNet
+  - [ ] LARS
+  - [ ] LARS Lasso
+  - [ ] OMP
+  - [ ] Bayesian
+  - [ ] Bayesian Ridge
+  - [ ] ARD
+  - [ ] Logistic
+  - [ ] Solvers
+  - [ ] Huber
+  - [ ] Quantile
+  - [ ] Polynomial
 
-WP1: Tensors
-- [ ] Custom array library
-- Implement Data Structures ("Advanced Data Structures", Peter Brass, City College of New York)
-  - [ ] Linked Lists
-  - [ ] Double-Linked Lists
-  - [ ] Skip-List
-  - [ ] Queue
-  - [ ] Stack
-  - [ ] Trees
-  - [ ] Heaps
-  - [ ] Union-Find
-  - [ ] DS for strings
-  - [ ] Hash Trables
-- Algebra on Tensors
-- Calculus on Tensors
-  - [ ] Numerical Derivation
-  - [ ] Numerical Integration
