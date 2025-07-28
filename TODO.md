@@ -6,7 +6,7 @@ Tutorials:
 - [ ] Read documentation for selected array library
 
 WP1: Tensors
-- [ ] Add extra implementations for selected array library
+- [ ] Custom array library
 - Implement Data Structures ("Advanced Data Structures", Peter Brass, City College of New York)
   - [ ] Linked Lists
   - [ ] Double-Linked Lists
