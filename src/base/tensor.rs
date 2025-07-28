@@ -3,6 +3,21 @@
 
 use std::ops::{Add, BitXor, Div, Index, IndexMut, Mul, Rem, Sub};
 
+#[derive(Debug)]
+enum ReductionType {
+    MAX,
+    MIN,
+    MED,
+    SUM,
+    AVG,
+    STD,
+}
+
+enum ReductionAxis {
+    Absolute,
+    Axis(Vec<usize>),
+}
+
 #[derive(Clone, Debug)]
 struct Tensor {
     data: Vec<f64>,
@@ -123,8 +138,55 @@ impl Tensor {
         }
     }
 
+    pub fn reduce(&self, reduction_type: ReductionType, reduction_axis: ReductionAxis) -> Self {
+        Tensor::new_1d(&[1, 2, 3])
+    }
+
+    fn reduction_op(&self, reduction_type: ReductionType) -> f64 {
+        match reduction_type {
+            ReductionType::MAX => self
+                .data
+                .iter()
+                .copied()
+                .max_by(|a: &f64, b: &f64| a.partial_cmp(b).unwrap())
+                .unwrap(),
+            ReductionType::MIN => self
+                .data
+                .iter()
+                .copied()
+                .min_by(|a: &f64, b: &f64| a.partial_cmp(b).unwrap())
+                .unwrap(),
+            ReductionType::SUM => self.data.iter().copied().sum(),
+            ReductionType::MED => {
+                let mut sorted: Vec<f64> = self
+                    .data
+                    .iter()
+                    .copied()
+                    .filter(|v| !v.is_nan()) // Optional: ignore NaNs
+                    .collect();
+                let len: usize = sorted.len();
+                sorted.sort_by(|a: &f64, b: &f64| a.partial_cmp(b).unwrap()); // NaN-safe sort
+
+                let mid: usize = len / 2;
+                if len % 2 == 0 {
+                    (sorted[mid - 1] + sorted[mid]) / 2.0
+                } else {
+                    sorted[mid]
+                }
+            }
+            ReductionType::AVG => self.reduction_op(ReductionType::SUM) / (self.data.len() as f64),
+            ReductionType::STD => {
+                let avg: f64 = self.reduction_op(ReductionType::AVG);
+                ((&(self - avg) ^ 2).reduction_op(ReductionType::SUM)
+                    / ((self.data.len() - 1) as f64))
+                    .sqrt()
+            }
+            _ => panic!("Reduction Type {reduction_type:?} ot implemented"),
+        }
+    }
+
     // TODO: Make agnostic to number of dimensions
-    pub fn max(&self, axis: Option<Tensor>) -> Result<Tensor, f64> {
+    pub fn max(&self, axis: Option<Tensor>) -> Result<Self, f64> {
         match axis {
             None => {
                 // Global max (no axis specified)
@@ -396,11 +458,27 @@ mod tests {
     }
 
     #[test]
-    fn test_at() {
+    fn test_at_2d() {
         let t: Tensor = Tensor::new(&[2, 2], &[1, 2, 3, 4]);
         assert_eq!(t.at(&[0, 1]).data, [2.0]);
         let sub_t: Tensor = t.at(&[0]);
         assert_eq!(sub_t.data, [1., 2.]);
+        let sub_t: Tensor = t.at(&[1]);
+        assert_eq!(sub_t.data, [3., 4.]);
+    }
+
+    #[test]
+    fn test_at_3d() {
+        let t: Tensor = Tensor::new(&[2, 2, 2], &[1, 2, 3, 4, 5, 6, 7, 8]);
+        assert_eq!(t.at(&[0]), Tensor::new(&[2, 2], &[1, 2, 3, 4]));
+        assert_eq!(t.at(&[1]), Tensor::new(&[2, 2], &[5, 6, 7, 8]));
+        assert_eq!(t.at(&[0, 0]), Tensor::new(&[2], &[1, 2]));
+        assert_eq!(t.at(&[0, 1]), Tensor::new(&[2], &[3, 4]));
+        assert_eq!(t.at(&[1, 0]), Tensor::new(&[2], &[5, 6]));
+        assert_eq!(t.at(&[1, 1]), Tensor::new(&[2], &[7, 8]));
+        assert_eq!(t.at(&[0, 0, 0]).data, [1.0]);
+        assert_eq!(t.at(&[0, 1, 0]).data, [3.0]);
+        assert_eq!(t.at(&[1, 0, 0]).data, [5.0]);
     }
 
     #[test]
@@ -561,5 +639,48 @@ mod tests {
                 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0
             ]
         );
+    }
+
+    #[test]
+    fn test_max() {
+        let data: Tensor = Tensor::new_1d(&[1.0, 5.0, -3.0]);
+        assert_eq!(data.reduction_op(ReductionType::MAX), 5.0);
+    }
+
+    #[test]
+    fn test_min() {
+        let data: Tensor = Tensor::new_1d(&[1.0, 5.0, -3.0]);
+        assert_eq!(data.reduction_op(ReductionType::MIN), -3.0);
+    }
+
+    #[test]
+    fn test_sum() {
+        let data: Tensor = Tensor::new_1d(&[1.0, 5.0, -3.0]);
+        assert_eq!(data.reduction_op(ReductionType::SUM), 3.0);
+    }
+
+    #[test]
+    fn test_med_odd() {
+        let data: Tensor = Tensor::new_1d(&[1.0, 5.0, -3.0]);
+        assert_eq!(data.reduction_op(ReductionType::MED), 1.0);
+    }
+
+    #[test]
+    fn test_med_even() {
+        let data: Tensor = Tensor::new_1d(&[1.0, 5.0, -3.0, 0.0]);
+        assert_eq!(data.reduction_op(ReductionType::MED), 0.5);
+    }
+
+    #[test]
+    fn test_avg() {
+        let data: Tensor = Tensor::new_1d(&[1.0, 5.0, -3.0]);
+        assert_eq!(data.reduction_op(ReductionType::AVG), 1.0);
+    }
+
+    #[test]
+    fn test_std() {
+        let data: Tensor = Tensor::new_1d(&[1.0, 5.0, -3.0]);
+        let std: f64 = data.reduction_op(ReductionType::STD);
+        assert_eq!(std, 4.0);
     }
 }
