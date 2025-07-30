@@ -110,7 +110,7 @@ impl Tensor {
         let mut flat_index: usize = 0;
         for (i, &idx) in indices.iter().enumerate() {
             if idx >= self.shape[i] {
-                panic!("Index out of bounds for dimension {}", i);
+                panic!("Index out of bounds for dimension {i}");
             }
             flat_index += idx * self.strides[i];
         }
